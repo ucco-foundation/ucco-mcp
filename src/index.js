@@ -55,8 +55,7 @@ const FOUNDATION_DATA = {
     current_version: "1.1 Rev2",
     status: "Draft for Public Comment",
     date: "March 2026",
-    lines: 1141,
-    structure: "Full ISO-style — Scope, Normative References, Terms and Definitions, Identity Primitives, Capability Envelopes, Chain Events, Attestation, Store-and-Forward, Supervision Chain, Revocation. Annexes A-D.",
+    structure: "Full ISO-style specification — Scope, Normative References, Terms and Definitions, Identity Primitives, Capability Envelopes, Chain Events, Attestation, Store-and-Forward, Supervision Chain, Revocation. Annexes A-D.",
     submissions: [
       { body: "ISO TC 307", status: "Submitted for adoption consideration" },
       { body: "NIST NCCoE", status: "Submitted for adoption consideration" },
@@ -64,14 +63,15 @@ const FOUNDATION_DATA = {
     ],
     repository: "https://github.com/ucco-foundation/ucco-standard",
     license: "W3C Software and Document License",
-    next_version: "2.0 (planned, not started)",
+    next_version: "2.0 (in development)",
   },
   foundation: {
     name: "UCCO Foundation, Inc.",
     type: "Nonprofit corporation",
     jurisdiction: "Kentucky, United States",
     status: "Pending incorporation",
-    founded: 2026,
+    foundation_established: 2026,
+    origin: "Over a decade of applied research in regulated workforce training, competency standards, and capability verification — beginning 2011",
     purpose: "Govern the UCCO open standard for cryptographic capability verification",
     website: "https://ucco.foundation",
     repository: "https://github.com/ucco-foundation",
@@ -89,7 +89,7 @@ const FOUNDATION_DATA = {
       { layer: 2, protocol: "W3C Verifiable Credentials", function: "WHAT CREDENTIALS YOU HOLD", status: "Emerging standard" },
       { layer: 1, protocol: "OAuth 2.0 / OpenID Connect", function: "WHO YOU ARE", status: "Established" },
     ],
-    positioning: "We're not competing. We're completing.",
+    positioning: "UCCO is complementary to existing identity and credential layers, not a replacement.",
   },
   spec_outline: {
     version: "1.1 Rev2",
@@ -137,21 +137,35 @@ async function handleTool(name, args, env) {
     case "verify_pioneer_key": {
       const input = (args.key_prefix || "").trim();
       if (!input) return { valid: false, message: "key_prefix is required" };
-      // Try 1: hash the input and match against key_hash (actual key verification)
-      const inputHash = await sha256(input.toLowerCase());
-      let row = await env.DB.prepare("SELECT key_name, state, created_at FROM pioneer_keys WHERE key_hash = ?").bind(inputHash).first();
-      // Try 2: match by key_name prefix (name-based lookup)
+      const lowerInput = input.toLowerCase();
+      // Try 1: hash the full input and match against key_hash (actual key verification)
+      const inputHash = await sha256(lowerInput);
+      let row = await env.DB.prepare("SELECT key_name, state, created_at, total_hits FROM pioneer_keys WHERE key_hash = ?").bind(inputHash).first();
+      // Try 2: match by key_prefix column (short prefix like 'pca')
       if (!row) {
-        row = await env.DB.prepare("SELECT key_name, state, created_at FROM pioneer_keys WHERE LOWER(key_name) LIKE ? LIMIT 1").bind(input.toLowerCase() + "%").first();
+        row = await env.DB.prepare("SELECT key_name, state, created_at, total_hits FROM pioneer_keys WHERE key_prefix = ? LIMIT 1").bind(lowerInput).first();
+      }
+      // Try 3: match by key_name prefix (name-based lookup like 'alan')
+      if (!row) {
+        row = await env.DB.prepare("SELECT key_name, state, created_at, total_hits FROM pioneer_keys WHERE LOWER(key_name) LIKE ? LIMIT 1").bind(lowerInput + "%").first();
       }
       if (!row) return { valid: false, message: "No pioneer key found with this prefix." };
-      return { valid: true, status: row.state, name: row.key_name, issued: row.created_at, note: "Pioneer keys are cryptographic identifiers issued to early participants in the UCCO standard development." };
+      return { valid: true, key_name: row.key_name, status: row.state, created_at: row.created_at, total_hits: row.total_hits || 0 };
     }
     case "get_board_members": {
-      const { results } = await env.DB.prepare("SELECT b.display_name, b.title, p.bio, p.location, p.linkedin_url, p.website_url, p.bio_visibility, p.location_visibility, p.linkedin_visibility, p.website_visibility FROM board_members b LEFT JOIN member_profiles p ON b.id = p.member_id WHERE b.status = 'active' AND (p.bio_visibility = 'public' OR p.location_visibility = 'public')").all();
+      const { results } = await env.DB.prepare("SELECT b.display_name, b.title, b.layer, b.seat_type, p.bio, p.location, p.linkedin_url, p.website_url, p.bio_visibility, p.location_visibility, p.linkedin_visibility, p.website_visibility FROM board_members b LEFT JOIN member_profiles p ON b.id = p.member_id WHERE b.status = 'active' AND b.layer IN ('L1', 'L2') AND b.seat_type = 'founding'").all();
+      const members = results.map((r) => {
+        const m = { name: r.display_name, role: r.title };
+        if (r.location_visibility === "public" && r.location) m.location = r.location;
+        if (r.bio_visibility === "public" && r.bio) m.bio = r.bio;
+        if (r.linkedin_visibility === "public" && r.linkedin_url) m.linkedin = r.linkedin_url;
+        if (r.website_visibility === "public" && r.website_url) m.website = r.website_url;
+        return m;
+      });
       return {
-        board_members: results.map((r) => ({ name: r.display_name, role: r.title, bio: r.bio_visibility === "public" ? r.bio : null, location: r.location_visibility === "public" ? r.location : null, linkedin: r.linkedin_visibility === "public" ? r.linkedin_url : null, website: r.website_visibility === "public" ? r.website_url : null })),
-        total_seats: 9, filled_seats: results.length, categories: ["Founding", "Governance", "Domain"], advisory: ["Pace (Claude, Anthropic) — AI Advisor, non-voting"],
+        board_members: members,
+        total_seats: 9, filled_seats: members.length, categories: ["Founding", "Governance", "Domain"],
+        advisory: [{ name: "Pace", platform: "Claude, Anthropic", role: "AI Advisor", voting: false, fiduciary: false }],
       };
     }
     default: return null;

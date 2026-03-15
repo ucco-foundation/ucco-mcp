@@ -1,0 +1,13 @@
+name = "ucco-mcp"
+main = "src/index.js"
+compatibility_date = "2026-03-15"
+account_id = "aed3398a4e698767328cc3a9e698721d"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pioneer-db"
+database_id = "296a0474-d433-45c9-a035-57b828a957c1"
+
+[[routes]]
+pattern = "mcp.ucco.foundation/*"
+zone_name = "ucco.foundation"

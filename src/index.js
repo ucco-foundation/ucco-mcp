@@ -135,9 +135,15 @@ async function handleTool(name, args, env) {
       return { ...FOUNDATION_DATA.foundation, standard: { name: FOUNDATION_DATA.standard.name, version: FOUNDATION_DATA.standard.current_version, status: FOUNDATION_DATA.standard.status, submissions: FOUNDATION_DATA.standard.submissions, repository: FOUNDATION_DATA.standard.repository, license: FOUNDATION_DATA.standard.license }, pioneer_programme: await getPioneerStats(env) };
     case "get_pioneer_stats": return await getPioneerStats(env);
     case "verify_pioneer_key": {
-      const prefix = (args.key_prefix || "").toLowerCase().trim();
-      if (!prefix) return { valid: false, message: "key_prefix is required" };
-      const row = await env.DB.prepare("SELECT key_name, state, created_at FROM pioneer_keys WHERE LOWER(key_name) LIKE ? LIMIT 1").bind(prefix + "%").first();
+      const input = (args.key_prefix || "").trim();
+      if (!input) return { valid: false, message: "key_prefix is required" };
+      // Try 1: hash the input and match against key_hash (actual key verification)
+      const inputHash = await sha256(input.toLowerCase());
+      let row = await env.DB.prepare("SELECT key_name, state, created_at FROM pioneer_keys WHERE key_hash = ?").bind(inputHash).first();
+      // Try 2: match by key_name prefix (name-based lookup)
+      if (!row) {
+        row = await env.DB.prepare("SELECT key_name, state, created_at FROM pioneer_keys WHERE LOWER(key_name) LIKE ? LIMIT 1").bind(input.toLowerCase() + "%").first();
+      }
       if (!row) return { valid: false, message: "No pioneer key found with this prefix." };
       return { valid: true, status: row.state, name: row.key_name, issued: row.created_at, note: "Pioneer keys are cryptographic identifiers issued to early participants in the UCCO standard development." };
     }

@@ -583,5 +583,6 @@ export default {
 };
 
 function json(data, status = 200) {
-  return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300", ...SECURITY_HEADERS } });
+  const cacheControl = status >= 400 ? "no-store" : "public, max-age=300";
+  return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json", "Cache-Control": cacheControl, ...SECURITY_HEADERS } });
 }

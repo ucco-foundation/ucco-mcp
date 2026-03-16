@@ -416,6 +416,8 @@ function docsPage() {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>UCCO Foundation MCP Server</title>
+<link rel="mcp-server" href="https://mcp.ucco.foundation/mcp" title="UCCO Foundation MCP Server" />
+<link rel="mcp-server-card" href="https://mcp.ucco.foundation/.well-known/mcp/server-card.json" type="application/json" />
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#012A4A;background:#fff;line-height:1.7;-webkit-font-smoothing:antialiased}
@@ -503,6 +505,27 @@ export default {
 
     // OAuth metadata
     if (path === "/.well-known/oauth-authorization-server") return handleOAuthMetadata();
+
+    // MCP discovery (SEP-1649 server card)
+    if (path === "/.well-known/mcp/server-card.json") return json({
+      "$schema": "https://modelcontextprotocol.io/schemas/server-card/v1.0",
+      version: "1.0", protocolVersion: PROTOCOL_VERSION,
+      serverInfo: { name: "UCCO Foundation", version: SERVER_VERSION, description: "Machine-queryable interface to the Universal Capability Certification Object (UCCO) open standard. The first standards body to make itself readable by AI agents via MCP.", homepage: "https://ucco.foundation" },
+      transport: { type: "streamable-http", url: "https://mcp.ucco.foundation/mcp" },
+      capabilities: { tools: true, resources: false, prompts: false },
+      authentication: { required: false, methods: ["oauth2"], note: "Unauthenticated access available. OAuth 2.1 with PKCE for enhanced access." },
+      contact: { email: "admin@ucco.foundation" },
+    });
+
+    // MCP discovery (SEP-1960)
+    if (path === "/.well-known/mcp") return json({
+      mcp_version: "1.0", server_name: "UCCO Foundation MCP Server", server_version: SERVER_VERSION,
+      endpoints: { streamable_http: "https://mcp.ucco.foundation/mcp" },
+      capabilities: { tools: true, resources: false, prompts: false, sampling: false, roots: false },
+      authentication: { required: false, methods: ["oauth2"], oauth2: { authorization_endpoint: "https://mcp.ucco.foundation/oauth/authorize", token_endpoint: "https://mcp.ucco.foundation/oauth/token" } },
+      security: { tls_required: true, min_tls_version: "1.2", security_contact: "admin@ucco.foundation" },
+      rate_limits: { requests_per_minute: 60 },
+    });
 
     // OAuth endpoints
     if (path === "/oauth/authorize" && request.method === "GET") return handleAuthorize(url, env);
